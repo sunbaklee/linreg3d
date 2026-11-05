@@ -396,14 +396,14 @@ tbody tr:hover { background: var(--hover); }
     };
     const hist3 = { type: 'scatter3d', mode: 'lines', x: [], y: [], z: [], hoverinfo: 'skip', line: { color: C.ink, width: 5 } };
     const pred3 = { type: 'scatter3d', mode: 'lines+markers', x: [], y: [], z: [],
-      line: { color: C.violet, width: 5, dash: 'dash' }, marker: { size: 3, color: C.violet },
+      line: { color: C.violet, width: 3, dash: 'dash' }, marker: { size: 2, color: C.violet },
       hovertemplate: '예상 위치<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
     const cur3 = { type: 'scatter3d', mode: 'markers', x: [], y: [], z: [],
-      marker: { size: 7, color: C.orange, line: { color: C.panel, width: 2 } },
+      marker: { size: 4.5, color: C.orange, line: { color: C.panel, width: 1 } },
       hovertemplate: '현재 위치<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
     const o = R.opt;
     const opt3 = { type: 'scatter3d', mode: 'markers', x: [o.w], y: [o.b], z: [cost(o.w, o.b, d) + S.zLift],
-      marker: { size: 6, color: C.ok, symbol: 'diamond' },
+      marker: { size: 3.5, color: C.ok, symbol: 'diamond' },
       hovertemplate: '최솟값<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
 
     const axis = (title, range) => ({ title: { text: title }, range, gridcolor: C.rule, zerolinecolor: C.muted, showbackground: false, color: C.muted });
