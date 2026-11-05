@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>선형회귀 경사하강법 대시보드</title>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+<style>
+:root {
+  --bg: #F3F5F7; --panel: #FFFFFF; --ink: #17212B; --muted: #5A6774; --rule: #E1E6EB;
+  --control: #8A96A3; --hover: #F6F8FA;
+  --blue: #1D6AAE; --blue-soft: #EAF2FA;
+  --orange: #D55E00; --orange-text: #A44900;
+  --violet: #6E43A6; --ok: #2E7D5B; --ok-soft: #E9F4EE; --warn: #B3261E; --warn-soft: #FBECEA;
+  --sans: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); font-feature-settings: 'tnum'; }
+::selection { background: var(--blue-soft); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+* { scrollbar-width: thin; scrollbar-color: #C5CDD5 transparent; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- 상단 바 ---------- */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 20px;
+  height: 60px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--rule); }
+.topbar h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -0.01em; white-space: nowrap; }
+.topbar .formula { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.topbar .spacer { flex: 1; }
+.status { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px;
+  background: var(--hover); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.status[data-state="run"] { background: var(--blue-soft); color: var(--blue); }
+.status[data-state="run"]::before { animation: pulse 1.2s ease-in-out infinite; }
+.status[data-state="ok"] { background: var(--ok-soft); color: var(--ok); }
+.status[data-state="warn"] { background: var(--warn-soft); color: var(--warn); }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* ---------- 버튼 ---------- */
+button { font: inherit; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--control); background: var(--panel); color: var(--ink); cursor: pointer;
+  transition: background-color .15s ease-out, border-color .15s ease-out; }
+button:hover:not(:disabled) { background: var(--hover); }
+button:disabled { color: var(--muted); border-color: var(--rule); background: var(--hover); cursor: not-allowed; }
+button svg { width: 16px; height: 16px; flex: none; }
+button.primary { background: var(--blue); border-color: var(--blue); color: #fff; min-width: 116px; }
+button.primary:hover:not(:disabled) { background: #185C98; }
+button.primary:disabled { background: var(--hover); border-color: var(--rule); color: var(--muted); }
+button.icon { width: 34px; padding: 0; }
+.actions { display: flex; gap: 8px; }
+.ico-pause { display: none; } #btn-play.running .ico-play { display: none; } #btn-play.running .ico-pause { display: block; }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 8px; background: var(--hover); border: 1px solid var(--rule); }
+.seg label, .seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 5px; background: transparent; color: var(--muted);
+  font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked), .seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(23,33,43,.12); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 1px; }
+.seg button:hover:not([aria-pressed="true"]) { background: transparent; color: var(--ink); }
+
+/* ---------- 레이아웃 ---------- */
+.shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 60px); }
+.side { position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; background: var(--panel); border-right: 1px solid var(--rule); padding: 20px; display: flex; flex-direction: column; gap: 24px; }
+.side .intro { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.side h2 { font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 12px; }
+.ctl { margin-bottom: 14px; }
+.ctl-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; font-size: 13px; }
+.ctl-row output { font-size: 13px; font-weight: 600; color: var(--ink); }
+input[type=range] { width: 100%; height: 22px; margin: 0; accent-color: var(--blue); cursor: pointer; }
+.check { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 13px; cursor: pointer; margin-bottom: 6px; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--violet); }
+.keys-help { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--muted); display: grid; gap: 6px; }
+kbd { font: 600 11px/1 var(--sans); padding: 3px 6px; border: 1px solid var(--control); border-bottom-width: 2px; border-radius: 4px; color: var(--ink); background: var(--panel); }
+
+.main { padding: 16px; display: grid; gap: 16px; align-content: start; }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.panel h2 { font-size: 14px; font-weight: 700; margin: 0; }
+.panel .sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+/* 지표 줄 */
+.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 0; margin: 0; }
+.metric { padding: 12px 18px; border-left: 1px solid var(--rule); }
+.metric:first-child { border-left: 0; }
+.metric dt { font-size: 12px; color: var(--muted); font-weight: 600; }
+.metric dd { margin: 2px 0 0; font: 700 22px/1.25 var(--sans); letter-spacing: -0.01em; }
+.metric dd small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.metric dd.delta-down { color: var(--ok); } .metric dd.delta-up { color: var(--warn); }
+
+.upper { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; }
+.right-col { display: grid; gap: 16px; grid-template-rows: auto auto; }
+.lower { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+
+#plot3d { height: 500px; cursor: grab; }
+#plot3d.panning { cursor: move; }
+#plot2d { height: 270px; }
+#plotloss { height: 170px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.toolbar .gap { width: 6px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; background: currentColor; }
+.legend .k-hist { color: var(--ink); } .legend .k-pred { color: var(--violet); }
+.legend .k-pred i { background: none; border-top: 3px dashed currentColor; height: 0; }
+.legend .k-cur { color: var(--orange); } .legend .k-cur i, .legend .k-opt i { width: 9px; height: 9px; border-radius: 50%; }
+.legend .k-opt { color: var(--ok); } .legend .k-opt i { border-radius: 1px; transform: rotate(45deg); width: 8px; height: 8px; }
+.legend b { color: var(--ink); font-weight: 500; }
+
+.calc { font: 13.5px/2 var(--sans); margin-top: 10px; overflow-x: auto; white-space: nowrap; }
+.calc .lhs { color: var(--muted); }
+.calc .res { color: var(--violet); font-weight: 700; }
+.table-wrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 7px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+thead th { color: var(--muted); font-weight: 600; font-size: 12px; }
+tbody th { text-align: left; font-weight: 700; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+tr.r-x th, tr.r-y th { color: var(--orange-text); }
+tr.r-h th { color: var(--blue); }
+tbody tr:hover { background: var(--hover); }
+
+@media (max-width: 1240px) {
+  .upper { grid-template-columns: 1fr; }
+  .right-col { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
+  #plot2d, #plotloss { height: 260px; }
+  .topbar .formula { display: none; }
+}
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric:nth-child(odd) { border-left: 0; }
+  .right-col, .lower { grid-template-columns: 1fr; }
+  .topbar { height: auto; flex-wrap: wrap; padding: 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .status[data-state="run"]::before { animation: none; } button { transition: none; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" fill="currentColor"/></symbol>
+  <symbol id="i-step" viewBox="0 0 24 24"><path d="M5 5v14l9-7z" fill="currentColor"/><path d="M17 5h2v14h-2z" fill="currentColor"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></symbol>
+</svg>
+
+<header class="topbar">
+  <h1>선형회귀 경사하강법</h1>
+  <span class="formula">h = w₁x + w₀ · J = ½Σ(h − y)²</span>
+  <div class="seg" role="radiogroup" aria-label="데이터셋">
+    <label><input type="radio" name="dataset" value="line" checked>직선형 데이터</label>
+    <label><input type="radio" name="dataset" value="sin">사인형 데이터</label>
+  </div>
+  <span class="spacer"></span>
+  <div id="status" class="status" role="status">대기 중</div>
+  <div class="actions">
+    <button class="primary" id="btn-play"><svg class="ico-play"><use href="#i-play"/></svg><svg class="ico-pause"><use href="#i-pause"/></svg><span id="btn-play-label">학습 시작</span></button>
+    <button id="btn-step"><svg><use href="#i-step"/></svg>한 단계</button>
+    <button id="btn-reset"><svg><use href="#i-reset"/></svg>처음으로</button>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="side" aria-label="조작">
+    <p class="intro">직선이 데이터에 맞춰지는 동안 파라미터 (w₁, w₀)가 비용 곡면을 따라 내려가는 모습을 함께 봅니다.</p>
+    <section>
+      <h2>시작점</h2>
+      <div class="ctl"><div class="ctl-row"><label for="w1">w₁ (기울기)</label><output id="w1-out"></output></div><input type="range" id="w1"></div>
+      <div class="ctl"><div class="ctl-row"><label for="w0">w₀ (절편)</label><output id="w0-out"></output></div><input type="range" id="w0"></div>
+    </section>
+    <section>
+      <h2>학습 설정</h2>
+      <div class="ctl"><div class="ctl-row"><label for="eta">학습률 η</label><output id="eta-out"></output></div><input type="range" id="eta" min="0.001" max="0.2" step="0.001" value="0.03"></div>
+      <div class="ctl"><div class="ctl-row"><label for="speed">진행 간격</label><output id="speed-out"></output></div><input type="range" id="speed" min="10" max="500" step="10" value="40"></div>
+    </section>
+    <section>
+      <h2>다음 예상 경로</h2>
+      <label class="check"><input type="checkbox" id="showpred" checked> 경로 보기</label>
+      <div class="ctl"><div class="ctl-row"><label for="predn">앞으로 볼 단계</label><output id="predn-out"></output></div><input type="range" id="predn" min="1" max="60" step="1" value="15"></div>
+    </section>
+    <div class="keys-help">
+      <span><kbd>Space</kbd> 시작 / 일시정지</span>
+      <span><kbd>→</kbd> 한 단계 진행</span>
+      <span><kbd>Shift</kbd> + 곡면 클릭: 새 시작점</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section aria-labelledby="metrics-h">
+    <h2 class="sr-only" id="metrics-h">학습 현황</h2>
+    <dl class="panel metrics">
+      <div class="metric"><dt>단계</dt><dd id="s-step">0</dd></div>
+      <div class="metric"><dt>비용 J</dt><dd id="s-cost">0</dd></div>
+      <div class="metric"><dt>다음 단계 변화 ΔJ</dt><dd id="s-delta">0</dd></div>
+      <div class="metric"><dt>기울기 크기 |∇J|</dt><dd id="s-grad">0</dd></div>
+      <div class="metric"><dt>최솟값까지 거리</dt><dd id="s-dist">0</dd></div>
+    </dl>
+    </section>
+
+    <section class="upper">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>비용 곡면 J(w₁, w₀)</h2>
+            <p class="sub">드래그로 돌리고 휠로 확대·축소해요.</p>
+          </div>
+          <div class="toolbar" role="group" aria-label="3D 보기 조작">
+            <div class="seg" role="group" aria-label="드래그 동작">
+              <button id="drag-rotate" aria-pressed="true">회전</button><button id="drag-pan" aria-pressed="false">이동</button>
+            </div>
+            <button class="icon" id="btn-zoom-in" aria-label="확대"><svg><use href="#i-plus"/></svg></button>
+            <button class="icon" id="btn-zoom-out" aria-label="축소"><svg><use href="#i-minus"/></svg></button>
+            <span class="gap"></span>
+            <button id="btn-cam-default">기본 시점</button>
+            <button id="btn-cam-top">위에서</button>
+          </div>
+        </div>
+        <div id="plot3d" role="img" aria-label="비용 곡면 3D 그래프"></div>
+        <div class="legend">
+          <span class="k-hist"><i></i><b>지나온 경로</b></span>
+          <span class="k-pred"><i></i><b>다음 예상 경로</b></span>
+          <span class="k-cur"><i></i><b>현재 위치</b></span>
+          <span class="k-opt"><i></i><b>최솟값</b></span>
+        </div>
+      </div>
+      <div class="right-col">
+        <div class="panel">
+          <h2>데이터와 직선</h2>
+          <p class="sub">점선 세로선은 각 데이터의 오차 (h − y)예요.</p>
+          <div id="plot2d"></div>
+        </div>
+        <div class="panel">
+          <h2>비용 J 추이</h2>
+          <p class="sub">단계별 비용 (로그 눈금)</p>
+          <div id="plotloss"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lower">
+      <div class="panel">
+        <h2>다음 단계 계산</h2>
+        <p class="sub">지금 위치에서 한 단계 진행하면 이렇게 바뀌어요.</p>
+        <div class="calc" id="calc"></div>
+      </div>
+      <div class="panel">
+        <h2>데이터별 예측과 오차</h2>
+        <div class="table-wrap"><table id="table"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-gl3d-2.35.2.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 데이터 ----------
+  const DATA = {
+    line: {
+      x: [-0.75, -0.6, -0.51, -0.3, -0.15, 0.15, 0.45, 0.53, 0.85, 0.98],
+      y: [ 0.00, -0.4,  0.02,  0.0,  0.33, 0.50, 0.50, 0.83, 0.70, 0.90],
+      xr: [-1, 1], yr: [-1, 1.2]
+    },
+    sin: {
+      x: [0, 0.1111, 0.2222, 0.3333, 0.4444, 0.5556, 0.6667, 0.7778, 0.8889, 1],
+      y: [-0.0834, 0.6315, 0.5576, 1.1941, -0.0167, -0.5104, -0.7654, -1.2339, -0.8544, -0.1818],
+      xr: [-0.2, 1.2], yr: [-1.6, 1.6]
+    }
+  };
+
+  // ---------- 수학 ----------
+  const linspace = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+  function cost(w, b, d) {
+    let c = 0;
+    for (let i = 0; i < d.x.length; i++) { const e = w * d.x[i] + b - d.y[i]; c += e * e; }
+    return 0.5 * c;
+  }
+  function grad(w, b, d) {
+    let dw = 0, db = 0;
+    for (let i = 0; i < d.x.length; i++) { const e = w * d.x[i] + b - d.y[i]; dw += e * d.x[i]; db += e; }
+    return { dw, db, norm: Math.hypot(dw, db) };
+  }
+  function optimum(d) {
+    const n = d.x.length;
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { sx += d.x[i]; sy += d.y[i]; sxx += d.x[i] ** 2; sxy += d.x[i] * d.y[i]; }
+    const w = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+    return { w, b: (sy - w * sx) / n };
+  }
+  function surfaceRange(d) {
+    const o = optimum(d);
+    const wlo = Math.min(0, o.w), whi = Math.max(0, o.w);
+    const blo = Math.min(0, o.b), bhi = Math.max(0, o.b);
+    const pw = Math.max(0.8, (whi - wlo) * 0.6), pb = Math.max(0.8, (bhi - blo) * 0.6);
+    const r = v => Math.round(v * 100) / 100;
+    return { w: [r(wlo - pw), r(whi + pw)], b: [r(blo - pb), r(bhi + pb)], opt: o };
+  }
+
+  // ---------- 상태 ----------
+  const S = {
+    key: 'line', w: 0, b: 0, eta: 0.03, speed: 40, predN: 15, showPred: true,
+    hist: [[0, 0]], histStart: 0, step: 0, running: false, timer: null, done: null, R: null, zLift: 0,
+    cam: null, drag: 'turntable'
+  };
+  const MAX_HIST = 3000, DRAW_HIST = 300, GRID = 40, ZOOM_NEAR = 0.6, ZOOM_FAR = 3.2;
+
+  const $ = id => document.getElementById(id);
+  const el2d = $('plot2d'), el3d = $('plot3d'), elLoss = $('plotloss');
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const f = (v, n = 3) => (v >= 0 ? '+' : '') + v.toFixed(n);
+  const CAM = {
+    def: { eye: { x: 1.55, y: -1.55, z: 1.05 }, up: { x: 0, y: 0, z: 1 }, center: { x: 0, y: 0, z: -0.1 } },
+    top: { eye: { x: 0, y: 0, z: 2.3 }, up: { x: 0, y: 1, z: 0 }, center: { x: 0, y: 0, z: 0 } }
+  };
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const CONFIG = { displaylogo: false, responsive: true, displayModeBar: false };
+  const CONFIG3D = { displaylogo: false, responsive: true, displayModeBar: false, scrollZoom: false };
+  let C = {}, FONT = {};
+
+  function predictPath() {
+    const d = DATA[S.key], out = [[S.w, S.b]];
+    let w = S.w, b = S.b;
+    for (let k = 0; k < S.predN; k++) {
+      const g = grad(w, b, d);
+      w -= S.eta * g.dw; b -= S.eta * g.db;
+      if (!isFinite(w) || !isFinite(b) || Math.abs(w) > 1e3 || Math.abs(b) > 1e3) break;
+      out.push([w, b]);
+    }
+    return out;
+  }
+
+  // ---------- 그리기: 전체 ----------
+  function renderAll() {
+    const d = DATA[S.key], R = S.R;
+    C = { ink: css('--ink'), muted: css('--muted'), rule: css('--rule'), blue: css('--blue'), orange: css('--orange'),
+          violet: css('--violet'), ok: css('--ok'), warn: css('--warn'), panel: css('--panel') };
+    FONT = { family: "'Pretendard Variable', Pretendard, system-ui, sans-serif", color: C.ink, size: 12 };
+
+    const W = linspace(R.w[0], R.w[1], GRID), B = linspace(R.b[0], R.b[1], GRID);
+    const Z = B.map(b => W.map(w => cost(w, b, d)));
+    let zmin = Infinity, zmax = -Infinity;
+    Z.forEach(row => row.forEach(z => { if (z < zmin) zmin = z; if (z > zmax) zmax = z; }));
+    S.zLift = (zmax - zmin) * 0.012;
+
+    const surface = {
+      type: 'surface', x: W, y: B, z: Z, showscale: false, opacity: 0.92,
+      colorscale: [[0, '#0F4C81'], [0.06, '#2367A3'], [0.18, '#4F8FC4'], [0.38, '#97BEE0'], [0.65, '#D4E4F2'], [1, '#F5F8FB']],
+      contours: {
+        x: { highlight: false }, y: { highlight: false },
+        z: { show: true, usecolormap: true, project: { z: true }, width: 1, highlight: false, start: zmin, end: zmax, size: (zmax - zmin) / 14 }
+      },
+      lighting: { ambient: 0.8, diffuse: 0.55, specular: 0.05, roughness: 0.9 },
+      hovertemplate: 'w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>'
+    };
+    const hist3 = { type: 'scatter3d', mode: 'lines', x: [], y: [], z: [], hoverinfo: 'skip', line: { color: C.ink, width: 5 } };
+    const pred3 = { type: 'scatter3d', mode: 'lines+markers', x: [], y: [], z: [],
+      line: { color: C.violet, width: 5, dash: 'dash' }, marker: { size: 3, color: C.violet },
+      hovertemplate: '예상 위치<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
+    const cur3 = { type: 'scatter3d', mode: 'markers', x: [], y: [], z: [],
+      marker: { size: 7, color: C.orange, line: { color: C.panel, width: 2 } },
+      hovertemplate: '현재 위치<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
+    const o = R.opt;
+    const opt3 = { type: 'scatter3d', mode: 'markers', x: [o.w], y: [o.b], z: [cost(o.w, o.b, d) + S.zLift],
+      marker: { size: 6, color: C.ok, symbol: 'diamond' },
+      hovertemplate: '최솟값<br>w₁ %{x:.3f}<br>w₀ %{y:.3f}<br>J %{z:.3f}<extra></extra>' };
+
+    const axis = (title, range) => ({ title: { text: title }, range, gridcolor: C.rule, zerolinecolor: C.muted, showbackground: false, color: C.muted });
+    Plotly.react(el3d, [surface, hist3, pred3, cur3, opt3], {
+      margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', font: FONT, showlegend: false, uirevision: S.key,
+      scene: { xaxis: axis('w₁', R.w), yaxis: axis('w₀', R.b), zaxis: axis('비용 J', [zmin, zmax]),
+               aspectmode: 'manual', aspectratio: { x: 1, y: 1, z: 0.7 }, camera: S.cam, dragmode: S.drag }
+    }, CONFIG3D);
+
+    const ax2 = (title, range) => ({ title: { text: title, standoff: 6 }, range, gridcolor: C.rule, zerolinecolor: C.muted, color: C.muted, linecolor: C.rule });
+    Plotly.react(el2d, [
+      { x: [], y: [], mode: 'lines', name: '오차', line: { color: C.muted, width: 1, dash: 'dot' }, hoverinfo: 'skip' },
+      { x: d.x, y: d.y, mode: 'markers', type: 'scatter', name: '데이터 y', marker: { color: C.orange, size: 8 } },
+      { x: d.xr, y: [], mode: 'lines', name: '현재 직선 h', line: { color: C.blue, width: 3 } },
+      { x: d.xr, y: [], mode: 'lines', name: '다음 단계', line: { color: C.violet, width: 2, dash: 'dash' } }
+    ], {
+      margin: { l: 40, r: 8, t: 4, b: 34 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: FONT, uirevision: S.key, xaxis: ax2('x', d.xr), yaxis: ax2('y', d.yr),
+      legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom', font: { size: 11, color: C.muted } }
+    }, CONFIG);
+
+    refresh();
+  }
+
+  // ---------- 그리기: 가벼운 갱신 ----------
+  let drawQueued = false;
+  function refresh() {
+    updateButtons();
+    if (drawQueued) return;
+    drawQueued = true;
+    requestAnimationFrame(() => { drawQueued = false; draw(); });
+  }
+  function thinIdx(n, max) {
+    if (n <= max) return Array.from({ length: n }, (_, i) => i);
+    const k = n / max, out = [];
+    for (let i = 0; i < max - 1; i++) out.push(Math.floor(i * k));
+    out.push(n - 1);
+    return out;
+  }
+
+  function drawLoss(d) {
+    const idx = thinIdx(S.hist.length, DRAW_HIST);
+    const xs = idx.map(i => S.histStart + i), ys = idx.map(i => cost(S.hist[i][0], S.hist[i][1], d));
+    const endColor = S.done === 'converge' ? C.ok : S.done === 'diverge' ? C.warn : C.orange;
+    const shapes = [], annotations = [];
+    if (S.done) {
+      const label = S.done === 'converge' ? `${S.step}단계 수렴` : `${S.step}단계 발산`;
+      shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: S.step, x1: S.step, y0: 0, y1: 1, line: { color: endColor, width: 1.5, dash: 'dot' } });
+      annotations.push({ x: S.step, y: 1, xref: 'x', yref: 'paper', text: label, showarrow: false, xanchor: 'right', yanchor: 'top',
+        font: { size: 11, color: endColor }, bgcolor: C.panel, borderpad: 2 });
+    }
+    Plotly.react(elLoss, [
+      { x: xs, y: ys, mode: 'lines', line: { color: C.blue, width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(29,106,174,0.07)',
+        hovertemplate: '%{x}단계<br>J %{y:.4f}<extra></extra>' },
+      { x: [xs[xs.length - 1]], y: [ys[ys.length - 1]], mode: 'markers', marker: { color: endColor, size: 8, line: { color: C.panel, width: 2 } }, hoverinfo: 'skip' }
+    ], {
+      margin: { l: 44, r: 8, t: 4, b: 28 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: FONT, showlegend: false,
+      xaxis: { range: [S.histStart, Math.max(S.step, S.histStart + 10)], gridcolor: C.rule, zeroline: false, color: C.muted, linecolor: C.rule },
+      yaxis: { type: 'log', dtick: 1, gridcolor: C.rule, color: C.muted, exponentformat: 'power' },
+      shapes, annotations
+    }, CONFIG);
+  }
+
+  function draw() {
+    const d = DATA[S.key];
+    const z = (w, b) => cost(w, b, d) + S.zLift;
+    const pred = predictPath();
+    const idx = thinIdx(S.hist.length, DRAW_HIST), H = idx.map(i => S.hist[i]);
+    Plotly.restyle(el3d, {
+      x: [H.map(p => p[0]), pred.map(p => p[0]), [S.w]],
+      y: [H.map(p => p[1]), pred.map(p => p[1]), [S.b]],
+      z: [H.map(p => z(p[0], p[1])), pred.map(p => z(p[0], p[1])), [z(S.w, S.b)]],
+      visible: [true, S.showPred && pred.length > 1, true]
+    }, [1, 2, 3]);
+
+    const g = grad(S.w, S.b, d);
+    const nw = S.w - S.eta * g.dw, nb = S.b - S.eta * g.db;
+    const rx = [], ry = [];
+    d.x.forEach((x, i) => { rx.push(x, x, null); ry.push(d.y[i], S.w * x + S.b, null); });
+    Plotly.restyle(el2d, {
+      x: [rx, d.xr, d.xr],
+      y: [ry, d.xr.map(x => S.w * x + S.b), d.xr.map(x => nw * x + nb)],
+      visible: [true, true, S.showPred && !S.done]
+    }, [0, 2, 3]);
+    drawLoss(d);
+
+    // 지표
+    const J = cost(S.w, S.b, d), Jn = cost(nw, nb, d), dJ = Jn - J, o = S.R.opt;
+    $('s-step').textContent = S.step.toLocaleString('ko-KR');
+    $('s-cost').textContent = J.toFixed(4);
+    const sd = $('s-delta');
+    sd.textContent = S.done ? '—' : f(dJ, 4);
+    sd.className = S.done ? '' : (dJ <= 0 ? 'delta-down' : 'delta-up');
+    $('s-grad').textContent = g.norm.toFixed(4);
+    $('s-dist').textContent = Math.hypot(S.w - o.w, S.b - o.b).toFixed(4);
+    $('w1').value = S.w; $('w0').value = S.b;
+    $('w1-out').textContent = S.w.toFixed(3);
+    $('w0-out').textContent = S.b.toFixed(3);
+    el3d.setAttribute('aria-label', `비용 곡면 3D 그래프. 현재 위치 w₁ ${S.w.toFixed(3)}, w₀ ${S.b.toFixed(3)}, 비용 ${J.toFixed(4)}. 최솟값 위치 w₁ ${o.w.toFixed(3)}, w₀ ${o.b.toFixed(3)}.`);
+
+    const e = S.eta.toFixed(3);
+    $('calc').innerHTML =
+      `<div><span class="lhs">∂J/∂w₁ = Σ(h−y)·x</span> = ${f(g.dw, 4)}</div>` +
+      `<div><span class="lhs">∂J/∂w₀ = Σ(h−y)</span>&nbsp;&nbsp;&nbsp;= ${f(g.db, 4)}</div>` +
+      `<div><span class="lhs">w₁ ← w₁ − η·∂J/∂w₁</span> = ${S.w.toFixed(4)} − ${e}×(${f(g.dw, 4)}) = <span class="res">${nw.toFixed(4)}</span></div>` +
+      `<div><span class="lhs">w₀ ← w₀ − η·∂J/∂w₀</span> = ${S.b.toFixed(4)} − ${e}×(${f(g.db, 4)}) = <span class="res">${nb.toFixed(4)}</span></div>` +
+      `<div><span class="lhs">비용 변화</span> ${J.toFixed(4)} → <span class="res">${Jn.toFixed(4)}</span></div>`;
+
+    d.x.forEach((x, i) => {
+      const h = S.w * x + S.b;
+      $('h' + i).textContent = f(h);
+      $('e' + i).textContent = ((h - d.y[i]) ** 2).toFixed(3);
+    });
+    updateButtons();
+  }
+
+  function buildTable() {
+    const d = DATA[S.key];
+    const head = '<thead><tr><th scope="col"><span class="sr-only">항목</span></th>' + d.x.map((_, i) => `<th scope="col">D${i + 1}</th>`).join('') + '</tr></thead>';
+    const row = (cls, label, cells) => `<tr class="${cls}"><th scope="row">${label}</th>${cells}</tr>`;
+    $('table').innerHTML = head + '<tbody>' +
+      row('r-x', 'x', d.x.map(v => `<td>${v}</td>`).join('')) +
+      row('r-y', 'y', d.y.map(v => `<td>${v}</td>`).join('')) +
+      row('r-h', 'h', d.x.map((_, i) => `<td id="h${i}"></td>`).join('')) +
+      row('r-e', '(h−y)²', d.x.map((_, i) => `<td id="e${i}"></td>`).join('')) +
+      '</tbody>';
+  }
+
+  // ---------- 학습 ----------
+  function stepOnce() {
+    if (S.done) return;
+    const d = DATA[S.key];
+    const g = grad(S.w, S.b, d);
+    S.w -= S.eta * g.dw;
+    S.b -= S.eta * g.db;
+    S.step++;
+    if (!isFinite(S.w) || !isFinite(S.b) || Math.abs(S.w) > 1e3 || Math.abs(S.b) > 1e3) {
+      S.done = 'diverge';
+      setStatus('발산했어요. 학습률을 낮춰 보세요', 'warn');
+      pause(true);
+      S.w = S.hist[S.hist.length - 1][0]; S.b = S.hist[S.hist.length - 1][1];
+      S.step--;
+      refresh();
+      return;
+    }
+    S.hist.push([S.w, S.b]);
+    if (S.hist.length > MAX_HIST) { S.hist.shift(); S.histStart++; }
+    if (grad(S.w, S.b, d).norm < 1e-3) {
+      S.done = 'converge';
+      setStatus(`${S.step}단계 만에 수렴했어요`, 'ok');
+      pause(true);
+    }
+    refresh();
+  }
+  function loop() { if (!S.running) return; stepOnce(); if (S.running) S.timer = setTimeout(loop, S.speed); }
+  function play() { if (S.running || S.done) return; S.running = true; setStatus('학습 중', 'run'); loop(); updateButtons(); }
+  function pause(silent) { S.running = false; clearTimeout(S.timer); if (!silent && !S.done) setStatus('일시정지'); updateButtons(); }
+  function setStart(w, b) {
+    pause(true);
+    S.w = w; S.b = b; S.hist = [[w, b]]; S.histStart = 0; S.step = 0; S.done = null;
+    setStatus('대기 중');
+    refresh();
+  }
+  function setStatus(text, kind) { const s = $('status'); s.textContent = text; s.dataset.state = kind || ''; }
+  function updateButtons() {
+    const p = $('btn-play');
+    $('btn-play-label').textContent = S.running ? '일시정지' : (S.step > 0 && !S.done ? '이어서 학습' : '학습 시작');
+    p.classList.toggle('running', S.running);
+    p.disabled = !!S.done;
+    $('btn-step').disabled = S.running || !!S.done;
+  }
+
+  function loadDataset(key) {
+    pause(true);
+    S.key = key;
+    S.R = surfaceRange(DATA[key]);
+    for (const [id, r] of [['w1', S.R.w], ['w0', S.R.b]]) { const el = $(id); el.min = r[0]; el.max = r[1]; el.step = 0.001; }
+    S.w = 0; S.b = 0; S.hist = [[0, 0]]; S.histStart = 0; S.step = 0; S.done = null;
+    S.cam = clone(CAM.def);
+    setStatus('대기 중');
+    buildTable();
+    renderAll();
+  }
+
+  // ---------- 이벤트 ----------
+  document.querySelectorAll('input[name=dataset]').forEach(r => r.addEventListener('change', e => loadDataset(e.target.value)));
+  $('w1').addEventListener('input', e => setStart(parseFloat(e.target.value), S.b));
+  $('w0').addEventListener('input', e => setStart(S.w, parseFloat(e.target.value)));
+  const bindRange = (id, fmt, apply) => {
+    const el = $(id);
+    el.addEventListener('input', () => { $(id + '-out').textContent = fmt(+el.value); apply(+el.value); });
+    $(id + '-out').textContent = fmt(+el.value);
+  };
+  bindRange('eta', v => v.toFixed(3), v => {
+    S.eta = v;
+    if (S.done === 'diverge') { S.done = null; setStatus(S.step ? '일시정지' : '대기 중'); }
+    refresh();
+  });
+  bindRange('speed', v => v + 'ms', v => { S.speed = v; });
+  bindRange('predn', v => v + '단계', v => { S.predN = v; refresh(); });
+  $('showpred').addEventListener('change', e => { S.showPred = e.target.checked; refresh(); });
+  $('btn-play').addEventListener('click', () => (S.running ? pause() : play()));
+  $('btn-step').addEventListener('click', () => { if (!S.running) { stepOnce(); if (!S.done) setStatus('일시정지'); } });
+  $('btn-reset').addEventListener('click', () => setStart(0, 0));
+
+  // ---------- 3D 보기 조작 ----------
+  let camQueued = false;
+  function applyCamera() {
+    if (camQueued) return;
+    camQueued = true;
+    requestAnimationFrame(() => { camQueued = false; Plotly.relayout(el3d, { 'scene.camera': S.cam }); });
+  }
+  function zoomBy(factor) {
+    const e = S.cam.eye, c = S.cam.center || { x: 0, y: 0, z: 0 };
+    const v = { x: e.x - c.x, y: e.y - c.y, z: e.z - c.z };
+    const r = Math.hypot(v.x, v.y, v.z) || 1;
+    const k = Math.min(ZOOM_FAR, Math.max(ZOOM_NEAR, r * factor)) / r;
+    S.cam.eye = { x: c.x + v.x * k, y: c.y + v.y * k, z: c.z + v.z * k };
+    applyCamera();
+  }
+  el3d.addEventListener('wheel', e => {
+    e.preventDefault(); e.stopPropagation();
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    zoomBy(Math.exp(Math.max(-60, Math.min(60, dy)) * 0.004));
+  }, { passive: false, capture: true });
+  $('btn-zoom-in').addEventListener('click', () => zoomBy(0.8));
+  $('btn-zoom-out').addEventListener('click', () => zoomBy(1.25));
+  $('btn-cam-default').addEventListener('click', () => { S.cam = clone(CAM.def); applyCamera(); });
+  $('btn-cam-top').addEventListener('click', () => { S.cam = clone(CAM.top); applyCamera(); });
+  function setDrag(mode) {
+    S.drag = mode;
+    $('drag-rotate').setAttribute('aria-pressed', String(mode === 'turntable'));
+    $('drag-pan').setAttribute('aria-pressed', String(mode === 'pan'));
+    el3d.classList.toggle('panning', mode === 'pan');
+    Plotly.relayout(el3d, { 'scene.dragmode': mode });
+  }
+  $('drag-rotate').addEventListener('click', () => setDrag('turntable'));
+  $('drag-pan').addEventListener('click', () => setDrag('pan'));
+
+  let shiftDown = false;
+  window.addEventListener('keydown', e => { if (e.key === 'Shift') shiftDown = true; });
+  window.addEventListener('keyup', e => { if (e.key === 'Shift') shiftDown = false; });
+  window.addEventListener('blur', () => { shiftDown = false; });
+  document.addEventListener('keydown', e => {
+    const t = e.target.tagName;
+    if (t === 'INPUT' || t === 'SELECT' || t === 'BUTTON' || t === 'TEXTAREA') return;
+    if (e.code === 'Space') { e.preventDefault(); S.running ? pause() : play(); }
+    else if (e.code === 'ArrowRight') { e.preventDefault(); if (!S.running) { stepOnce(); if (!S.done) setStatus('일시정지'); } }
+  });
+
+  loadDataset('line');
+  el3d.on('plotly_relayout', ev => { if (ev && ev['scene.camera']) S.cam = clone(ev['scene.camera']); });
+  el3d.on('plotly_click', ev => {
+    if (!shiftDown) return;
+    const p = ev.points && ev.points[0];
+    if (p && p.curveNumber === 0) setStart(+p.x, +p.y);
+  });
+})();
+</script>
+</body>
+</html>
